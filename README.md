@@ -62,7 +62,7 @@ To respect the original work and its maintainers, I will not be merging upstream
 
 ## Acknowledgments  
 
-This project owes its origins to the [Fang](https://github.com/ayrat555/fang) crate. I deeply appreciate the contributions and inspiration from:  
+This project owes its origins to the [Fang](https://github.com/ayrat555/fang) crate. Sankyuda to:  
 
 - Ayrat Badykov ([@ayrat555](https://github.com/ayrat555))  
 - Pepe Márquez ([@pxp9](https://github.com/pxp9))  
