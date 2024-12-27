@@ -1,5 +1,5 @@
 [package]
-name = "backie"
+name = "foo"
 version = "0.9.0"
 authors = [
     "Rafael Caricio <rafael@caricio.com>",
@@ -28,7 +28,14 @@ tokio = { version = "1.25", features = ["rt", "time", "macros", "sync"] }
 
 [dev-dependencies]
 itertools = "0.10"
+anyhow = { workspace = true }
+env_logger = { workspace = true }
+
+[[example]]
+name = "demo"
+required-features = ["full-tokio"] 
 
 [features]
 default = ["async_postgres"]
 async_postgres = ["diesel-async"]
+full-tokio = ["tokio/full"]
