@@ -1,4 +1,4 @@
-use crate::task::{CurrentTask, TaskHash};
+use crate::sqlite_task::{CurrentTask, TaskHash};
 use crate::BackoffMode;
 use async_trait::async_trait;
 use serde::{de::DeserializeOwned, ser::Serialize};
@@ -41,37 +41,37 @@ use std::fmt::Debug;
 /// ```
 #[async_trait]
 pub trait BackgroundTask: Serialize + DeserializeOwned + Sync + Send + 'static {
-    /// Unique name of the task.
-    ///
-    /// This MUST be unique for the whole application.
-    const TASK_NAME: &'static str;
+	/// Unique name of the task.
+	///
+	/// This MUST be unique for the whole application.
+	const TASK_NAME: &'static str;
 
-    /// Task queue where this task will be executed.
-    ///
-    /// Used to route to which workers are going to be executing this task. It uses the default
-    /// task queue if not changed.
-    const QUEUE: &'static str = "default";
+	/// Task queue where this task will be executed.
+	///
+	/// Used to route to which workers are going to be executing this task. It uses the default
+	/// task queue if not changed.
+	const QUEUE: &'static str = "default";
 
-    /// Number of retries for tasks.
-    ///
-    /// By default, it is set to 3.
-    const MAX_RETRIES: i32 = 3;
+	/// Number of retries for tasks.
+	///
+	/// By default, it is set to 3.
+	const MAX_RETRIES: i32 = 3;
 
-    /// Backoff mode for tasks.
-    const BACKOFF_MODE: BackoffMode = BackoffMode::ExponentialBackoff;
+	/// Backoff mode for tasks.
+	const BACKOFF_MODE: BackoffMode = BackoffMode::ExponentialBackoff;
 
-    /// The application data provided to this task at runtime.
-    type AppData: Clone + Send + 'static;
+	/// The application data provided to this task at runtime.
+	type AppData: Clone + Send + 'static;
 
-    /// An application custom error type.
-    type Error: Debug + Send + 'static;
+	/// An application custom error type.
+	type Error: Debug + Send + 'static;
 
-    /// Execute the task. This method should define its logic
-    async fn run(&self, task: CurrentTask, context: Self::AppData) -> Result<(), Self::Error>;
+	/// Execute the task. This method should define its logic
+	async fn run(&self, task: CurrentTask, context: Self::AppData) -> Result<(), Self::Error>;
 
-    /// If set to true, no new tasks with the same metadata will be inserted
-    /// By default it is set to false.
-    fn uniq(&self) -> Option<TaskHash> {
-        None
-    }
+	/// If set to true, no new tasks with the same metadata will be inserted
+	/// By default it is set to false.
+	fn uniq(&self) -> Option<TaskHash> {
+		None
+	}
 }
