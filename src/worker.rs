@@ -27,15 +27,15 @@ pub enum TaskExecError {
 	Panicked(String),
 }
 
-pub(crate) fn runnable<BT>(task_info: CurrentTask, payload: serde_json::Value, app_context: BT::AppData) -> Pin<Box<dyn Future<Output = Result<(), TaskExecError>> + Send>>
+pub fn runnable<BT>(task_info: CurrentTask, payload: serde_json::Value, app_context: BT::AppData) -> Pin<Box<dyn Future<Output = Result<(), TaskExecError>> + Send>>
 where
 	BT: BackgroundTask,
 {
 	Box::pin(async move {
 		let background_task: BT = serde_json::from_value(payload)?;
 		match background_task.run(task_info, app_context).await {
-			Ok(_) => Ok(()),
-			Err(err) => Err(TaskExecError::ExecutionFailed(format!("{:?}", err))),
+			Ok(()) => Ok(()),
+			Err(err) => Err(TaskExecError::ExecutionFailed(format!("{err:?}"))),
 		}
 	})
 }
@@ -105,7 +105,7 @@ where
 											log::info!("Shutting down worker");
 											return Ok(());
 									}
-									_ = tokio::time::sleep(self.config.pull_interval).fuse() => {}
+									() = tokio::time::sleep(self.config.pull_interval).fuse() => {}
 							}
 						}
 						None => {
@@ -138,14 +138,14 @@ where
 		});
 
 		match &result {
-			Ok(_) => self.finalize_task(task, result).await?,
+			Ok(()) => self.finalize_task(task, result).await?,
 			Err(error) => {
 				if task.retries < task.max_retries {
 					let backoff = task.backoff_mode.next_attempt(task.retries);
 
 					log::debug!("Task {} failed to run and will be retried in {} seconds", task.id, backoff.as_secs());
 
-					let error_message = format!("{}", error);
+					let error_message = format!("{error}");
 
 					self.store.schedule_task_retry(task.id, backoff, &error_message).await?;
 				} else {
@@ -160,13 +160,13 @@ where
 	async fn finalize_task(&self, task: Task, result: Result<(), TaskExecError>) -> Result<(), BackieError> {
 		match self.config.retention_mode {
 			RetentionMode::KeepAll => match result {
-				Ok(_) => {
+				Ok(()) => {
 					self.store.set_task_state(task.id, TaskState::Done).await?;
 					log::debug!("Task {} done and kept in the database", task.id);
 				}
 				Err(error) => {
 					log::debug!("Task {} failed and kept in the database", task.id);
-					self.store.set_task_state(task.id, TaskState::Failed(format!("{}", error))).await?;
+					self.store.set_task_state(task.id, TaskState::Failed(format!("{error}"))).await?;
 				}
 			},
 			RetentionMode::RemoveAll => {
@@ -174,13 +174,13 @@ where
 				self.store.remove_task(task.id).await?;
 			}
 			RetentionMode::RemoveDone => match result {
-				Ok(_) => {
+				Ok(()) => {
 					log::debug!("Task {} done and deleted from the database", task.id);
 					self.store.remove_task(task.id).await?;
 				}
 				Err(error) => {
 					log::debug!("Task {} failed and kept in the database", task.id);
-					self.store.set_task_state(task.id, TaskState::Failed(format!("{}", error))).await?;
+					self.store.set_task_state(task.id, TaskState::Failed(format!("{error}"))).await?;
 				}
 			},
 		};

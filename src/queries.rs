@@ -12,14 +12,14 @@ impl Task {
 		Ok(result.rows_affected())
 	}
 
-	pub(crate) async fn fail_with_message(connection: &mut SqliteConnection, id: TaskId, error_message: &str) -> Result<Task, AsyncQueueError> {
+	pub(crate) async fn fail_with_message(connection: &mut SqliteConnection, id: TaskId, error_message: &str) -> Result<Self, AsyncQueueError> {
 		let error = serde_json::json!({
 				"error": error_message,
 		});
 
 		let now = SqliteDateTime(Utc::now());
 
-		let task = sqlx::query_as::<_, Task>(
+		let task = sqlx::query_as::<_, Self>(
 			"UPDATE backie_tasks 
             SET error_info = ?, done_at = ?
             WHERE id = ?
@@ -34,14 +34,14 @@ impl Task {
 		Ok(task)
 	}
 
-	pub(crate) async fn schedule_retry(connection: &mut SqliteConnection, id: TaskId, backoff: Duration, error_message: &str) -> Result<Task, AsyncQueueError> {
+	pub(crate) async fn schedule_retry(connection: &mut SqliteConnection, id: TaskId, backoff: Duration, error_message: &str) -> Result<Self, AsyncQueueError> {
 		let error = serde_json::json!({
 				"error": error_message,
 		});
 
 		let scheduled_at = SqliteDateTime(Utc::now() + chrono::Duration::from_std(backoff).unwrap_or_else(|_| chrono::Duration::max_value()));
 
-		let task = sqlx::query_as::<_, Task>(
+		let task = sqlx::query_as::<_, Self>(
 			"UPDATE backie_tasks 
             SET error_info = ?,
                 retries = retries + 1,
@@ -59,13 +59,13 @@ impl Task {
 		Ok(task)
 	}
 
-	pub(crate) async fn fetch_next_pending(connection: &mut SqliteConnection, queue_name: &str, execution_timeout: Option<Duration>, task_names: &[String]) -> Option<Task> {
+	pub(crate) async fn fetch_next_pending(connection: &mut SqliteConnection, queue_name: &str, execution_timeout: Option<Duration>, task_names: &[String]) -> Option<Self> {
 		let now = SqliteDateTime(Utc::now());
 		let query = match execution_timeout {
 			Some(timeout) => {
 				let timeout_threshold = SqliteDateTime(Utc::now() - chrono::Duration::from_std(timeout).unwrap_or_else(|_| chrono::Duration::max_value()));
 
-				sqlx::query_as::<_, Task>(
+				sqlx::query_as::<_, Self>(
 					"SELECT * FROM backie_tasks
                     WHERE task_name IN (SELECT value FROM json_each(?))
                     AND scheduled_at < ?
@@ -80,7 +80,7 @@ impl Task {
 				.bind(queue_name)
 				.bind(timeout_threshold)
 			}
-			None => sqlx::query_as::<_, Task>(
+			None => sqlx::query_as::<_, Self>(
 				"SELECT * FROM backie_tasks
                 WHERE task_name IN (SELECT value FROM json_each(?))
                 AND scheduled_at < ?
@@ -98,9 +98,9 @@ impl Task {
 		query.fetch_optional(connection).await.ok().flatten()
 	}
 
-	pub(crate) async fn set_running(connection: &mut SqliteConnection, task: Task) -> Result<Task, AsyncQueueError> {
+	pub(crate) async fn set_running(connection: &mut SqliteConnection, task: Self) -> Result<Self, AsyncQueueError> {
 		let now = SqliteDateTime(Utc::now());
-		let task = sqlx::query_as::<_, Task>(
+		let task = sqlx::query_as::<_, Self>(
 			"UPDATE backie_tasks 
             SET running_at = ?
             WHERE id = ?
@@ -114,9 +114,9 @@ impl Task {
 		Ok(task)
 	}
 
-	pub(crate) async fn set_done(connection: &mut SqliteConnection, id: TaskId) -> Result<Task, AsyncQueueError> {
+	pub(crate) async fn set_done(connection: &mut SqliteConnection, id: TaskId) -> Result<Self, AsyncQueueError> {
 		let now = SqliteDateTime(Utc::now());
-		let task = sqlx::query_as::<_, Task>(
+		let task = sqlx::query_as::<_, Self>(
 			"UPDATE backie_tasks 
             SET done_at = ?
             WHERE id = ?
@@ -130,11 +130,11 @@ impl Task {
 		Ok(task)
 	}
 
-	pub(crate) async fn insert(connection: &mut SqliteConnection, new_task: NewTask) -> Result<Task, AsyncQueueError> {
+	pub(crate) async fn insert(connection: &mut SqliteConnection, new_task: NewTask) -> Result<Self, AsyncQueueError> {
 		let (task_name, queue_name, uniq_hash, payload, timeout_msecs, max_retries, backoff_mode) = new_task.into_values();
 		let id = TaskId::from(uuid::Uuid::new_v4());
 
-		let task = sqlx::query_as::<_, Task>(
+		let task = sqlx::query_as::<_, Self>(
 			"INSERT INTO backie_tasks (
                 id, task_name, queue_name, uniq_hash, payload, 
                 timeout_msecs, created_at, scheduled_at, 

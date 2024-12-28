@@ -77,6 +77,7 @@ pub struct Task {
 }
 
 impl Task {
+	#[must_use]
 	pub fn state(&self) -> TaskState {
 		match (self.done_at, &self.error_info) {
 			(Some(_), Some(error)) => TaskState::Failed(error.to_string()),
@@ -93,9 +94,9 @@ impl TryFrom<SqliteRow> for Task {
 	fn try_from(row: SqliteRow) -> Result<Self, Self::Error> {
 		let id = row
 			.try_get::<String, _>("id")
-			.and_then(|id| Uuid::parse_str(&id).map_err(|e| Error::Protocol(format!("Invalid UUID: {}", e))).map(TaskId::from))?;
+			.and_then(|id| Uuid::parse_str(&id).map_err(|e| Error::Protocol(format!("Invalid UUID: {e}"))).map(TaskId::from))?;
 
-		Ok(Task {
+		Ok(Self {
 			id,
 			task_name: row.try_get("task_name")?,
 			queue_name: row.try_get("queue_name")?,
@@ -148,6 +149,7 @@ impl NewTask {
 		Self::with_timeout(background_task, Duration::from_secs(120))
 	}
 
+	#[must_use]
 	pub fn into_values(self) -> (String, String, Option<TaskHash>, serde_json::Value, i64, i32, BackoffMode) {
 		(
 			self.task_name,
@@ -169,7 +171,8 @@ pub struct CurrentTask {
 }
 
 impl CurrentTask {
-	pub fn new(task: &Task) -> Self {
+	#[must_use]
+	pub const fn new(task: &Task) -> Self {
 		Self {
 			id: task.id,
 			retries: task.retries,
@@ -177,15 +180,18 @@ impl CurrentTask {
 		}
 	}
 
-	pub fn id(&self) -> TaskId {
+	#[must_use]
+	pub const fn id(&self) -> TaskId {
 		self.id
 	}
 
-	pub fn retry_count(&self) -> i32 {
+	#[must_use]
+	pub const fn retry_count(&self) -> i32 {
 		self.retries
 	}
 
-	pub fn created_at(&self) -> SqliteDateTime {
+	#[must_use]
+	pub const fn created_at(&self) -> SqliteDateTime {
 		self.created_at
 	}
 }
@@ -206,7 +212,7 @@ impl Encode<'_, Sqlite> for TaskId {
 impl<'r> Decode<'r, Sqlite> for TaskId {
 	fn decode(value: SqliteValueRef<'r>) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
 		let s = <String as Decode<Sqlite>>::decode(value)?;
-		Ok(TaskId(Uuid::parse_str(&s)?))
+		Ok(Self(Uuid::parse_str(&s)?))
 	}
 }
 
@@ -225,6 +231,6 @@ impl Encode<'_, Sqlite> for TaskHash {
 impl<'r> Decode<'r, Sqlite> for TaskHash {
 	fn decode(value: SqliteValueRef<'r>) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
 		let s = <String as Decode<Sqlite>>::decode(value)?;
-		Ok(TaskHash::new(s))
+		Ok(Self::new(s))
 	}
 }

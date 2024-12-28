@@ -46,7 +46,7 @@ impl Default for BackoffMode {
 }
 
 impl BackoffMode {
-	fn next_attempt(&self, attempt: i32) -> Duration {
+	const fn next_attempt(&self, attempt: i32) -> Duration {
 		match self {
 			Self::NoBackoff => Duration::from_secs(0),
 			Self::ExponentialBackoff => Duration::from_secs(2u64.saturating_pow(attempt.saturating_add(1) as u32)),

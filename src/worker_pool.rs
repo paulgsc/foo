@@ -61,7 +61,7 @@ where
 	where
 		BT: BackgroundTask<AppData = AppData>,
 	{
-		self.queue_tasks.entry(BT::QUEUE.to_string()).or_insert_with(Vec::new).push(BT::TASK_NAME.to_string());
+		self.queue_tasks.entry(BT::QUEUE.to_string()).or_default().push(BT::TASK_NAME.to_string());
 		self.task_registry.insert(BT::TASK_NAME.to_string(), Arc::new(runnable::<BT>));
 		self
 	}
@@ -76,7 +76,7 @@ where
 		F: Future<Output = ()> + Send + 'static,
 	{
 		// Validate that all registered tasks queues are configured
-		for (queue_name, tasks_for_queue) in self.queue_tasks.into_iter() {
+		for (queue_name, tasks_for_queue) in self.queue_tasks {
 			if !self.worker_queues.contains_key(&queue_name) {
 				return Err(BackieError::QueueNotConfigured(queue_name, tasks_for_queue));
 			}
@@ -87,7 +87,7 @@ where
 		let mut worker_handles = Vec::new();
 
 		// Spawn all individual workers per queue
-		for (queue_name, queue_config) in self.worker_queues.iter() {
+		for (queue_name, queue_config) in &self.worker_queues {
 			for idx in 0..queue_config.num_workers {
 				let mut worker: Worker<AppData, S> = Worker::new(
 					self.task_store.clone(),
@@ -177,13 +177,15 @@ impl QueueConfig {
 	}
 
 	/// Set the number of workers for this queue.
-	pub fn num_workers(mut self, num_workers: u32) -> Self {
+	#[must_use]
+	pub const fn num_workers(mut self, num_workers: u32) -> Self {
 		self.num_workers = num_workers;
 		self
 	}
 
 	/// Set the retention mode for this queue.
-	pub fn retention_mode(mut self, retention_mode: RetentionMode) -> Self {
+	#[must_use]
+	pub const fn retention_mode(mut self, retention_mode: RetentionMode) -> Self {
 		self.retention_mode = retention_mode;
 		self
 	}
@@ -192,7 +194,8 @@ impl QueueConfig {
 	///
 	/// This is the maximum time a task can run before it is considered failed and ready to retry.
 	/// If this is not set, the task may run indefinitely.
-	pub fn execution_timeout(mut self, execution_timeout: Duration) -> Self {
+	#[must_use]
+	pub const fn execution_timeout(mut self, execution_timeout: Duration) -> Self {
 		self.execution_timeout = Some(execution_timeout);
 		self
 	}
@@ -201,7 +204,8 @@ impl QueueConfig {
 	///
 	/// This is the interval at which the queue will be checking for new tasks by calling
 	/// the backend storage.
-	pub fn pull_interval(mut self, pull_interval: Duration) -> Self {
+	#[must_use]
+	pub const fn pull_interval(mut self, pull_interval: Duration) -> Self {
 		self.pull_interval = pull_interval;
 		self
 	}
