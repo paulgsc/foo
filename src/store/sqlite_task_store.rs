@@ -11,11 +11,13 @@ pub struct SqliteTaskStore {
 }
 
 impl SqliteTaskStore {
+	#[allow(dead_code)]
 	pub const fn new(pool: Pool<Sqlite>) -> Self {
 		Self { pool }
 	}
 
 	/// Create a new `SQLite` pool with the given connection string
+	#[allow(dead_code)]
 	pub async fn create(database_url: &str) -> Result<Self, sqlx::Error> {
 		let pool = SqlitePool::connect(database_url).await?;
 		Ok(Self::new(pool))
