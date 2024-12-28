@@ -8,7 +8,7 @@ use std::time::Duration;
 impl Task {
 	#[allow(dead_code)]
 	pub(crate) async fn remove(connection: &mut SqliteConnection, id: TaskId) -> Result<u64, AsyncQueueError> {
-		let result = sqlx::query("DELETE FROM backie_tasks WHERE id = ?").bind(id).execute(connection).await?;
+		let result = sqlx::query!("DELETE FROM backie_tasks WHERE id = ?", id).execute(connection).await?;
 
 		Ok(result.rows_affected())
 	}
@@ -18,18 +18,18 @@ impl Task {
 		let error = serde_json::json!({
 				"error": error_message,
 		});
-
 		let now = SqliteDateTime(Utc::now());
 
-		let task = sqlx::query_as::<_, Self>(
-			"UPDATE backie_tasks 
+		let task = sqlx::query_as!(
+			Self,
+			r#"UPDATE backie_tasks 
             SET error_info = ?, done_at = ?
             WHERE id = ?
-            RETURNING *",
+            RETURNING *"#,
+			error,
+			now,
+			id
 		)
-		.bind(error)
-		.bind(now)
-		.bind(id)
 		.fetch_one(connection)
 		.await?;
 
@@ -41,21 +41,21 @@ impl Task {
 		let error = serde_json::json!({
 				"error": error_message,
 		});
-
 		let scheduled_at = SqliteDateTime(Utc::now() + chrono::Duration::from_std(backoff).unwrap_or_else(|_| chrono::Duration::max_value()));
 
-		let task = sqlx::query_as::<_, Self>(
-			"UPDATE backie_tasks 
+		let task = sqlx::query_as!(
+			Self,
+			r#"UPDATE backie_tasks 
             SET error_info = ?,
                 retries = retries + 1,
                 scheduled_at = ?,
                 running_at = NULL
             WHERE id = ?
-            RETURNING *",
+            RETURNING *"#,
+			error,
+			scheduled_at,
+			id
 		)
-		.bind(error)
-		.bind(scheduled_at)
-		.bind(id)
 		.fetch_one(connection)
 		.await?;
 
@@ -65,54 +65,65 @@ impl Task {
 	#[allow(dead_code)]
 	pub(crate) async fn fetch_next_pending(connection: &mut SqliteConnection, queue_name: &str, execution_timeout: Option<Duration>, task_names: &[String]) -> Option<Self> {
 		let now = SqliteDateTime(Utc::now());
-		let query = match execution_timeout {
+		let task_names_json = serde_json::to_value(task_names).unwrap();
+
+		match execution_timeout {
 			Some(timeout) => {
 				let timeout_threshold = SqliteDateTime(Utc::now() - chrono::Duration::from_std(timeout).unwrap_or_else(|_| chrono::Duration::max_value()));
 
-				sqlx::query_as::<_, Self>(
-					"SELECT * FROM backie_tasks
+				sqlx::query_as!(
+					Self,
+					r#"SELECT * FROM backie_tasks
                     WHERE task_name IN (SELECT value FROM json_each(?))
                     AND scheduled_at < ?
                     AND done_at IS NULL
                     AND queue_name = ?
                     AND (running_at IS NULL OR running_at < ?)
                     ORDER BY created_at ASC
-                    LIMIT 1",
+                    LIMIT 1"#,
+					task_names_json,
+					now,
+					queue_name,
+					timeout_threshold
 				)
-				.bind(serde_json::to_value(task_names).unwrap())
-				.bind(now)
-				.bind(queue_name)
-				.bind(timeout_threshold)
+				.fetch_optional(connection)
+				.await
+				.ok()
+				.flatten()
 			}
-			None => sqlx::query_as::<_, Self>(
-				"SELECT * FROM backie_tasks
-                WHERE task_name IN (SELECT value FROM json_each(?))
-                AND scheduled_at < ?
-                AND done_at IS NULL
-                AND queue_name = ?
-                AND running_at IS NULL
-                ORDER BY created_at ASC
-                LIMIT 1",
+			None => sqlx::query_as!(
+				Self,
+				r#"SELECT * FROM backie_tasks
+                    WHERE task_name IN (SELECT value FROM json_each(?))
+                    AND scheduled_at < ?
+                    AND done_at IS NULL
+                    AND queue_name = ?
+                    AND running_at IS NULL
+                    ORDER BY created_at ASC
+                    LIMIT 1"#,
+				task_names_json,
+				now,
+				queue_name
 			)
-			.bind(serde_json::to_value(task_names).unwrap())
-			.bind(now)
-			.bind(queue_name),
-		};
-
-		query.fetch_optional(connection).await.ok().flatten()
+			.fetch_optional(connection)
+			.await
+			.ok()
+			.flatten(),
+		}
 	}
 
 	#[allow(dead_code)]
 	pub(crate) async fn set_running(connection: &mut SqliteConnection, task: Self) -> Result<Self, AsyncQueueError> {
 		let now = SqliteDateTime(Utc::now());
-		let task = sqlx::query_as::<_, Self>(
-			"UPDATE backie_tasks 
+		let task = sqlx::query_as!(
+			Self,
+			r#"UPDATE backie_tasks 
             SET running_at = ?
             WHERE id = ?
-            RETURNING *",
+            RETURNING *"#,
+			now,
+			task.id
 		)
-		.bind(now)
-		.bind(task.id)
 		.fetch_one(connection)
 		.await?;
 
@@ -122,14 +133,15 @@ impl Task {
 	#[allow(dead_code)]
 	pub(crate) async fn set_done(connection: &mut SqliteConnection, id: TaskId) -> Result<Self, AsyncQueueError> {
 		let now = SqliteDateTime(Utc::now());
-		let task = sqlx::query_as::<_, Self>(
-			"UPDATE backie_tasks 
+		let task = sqlx::query_as!(
+			Self,
+			r#"UPDATE backie_tasks 
             SET done_at = ?
             WHERE id = ?
-            RETURNING *",
+            RETURNING *"#,
+			now,
+			id
 		)
-		.bind(now)
-		.bind(id)
 		.fetch_one(connection)
 		.await?;
 
@@ -140,26 +152,28 @@ impl Task {
 	pub(crate) async fn insert(connection: &mut SqliteConnection, new_task: NewTask) -> Result<Self, AsyncQueueError> {
 		let (task_name, queue_name, uniq_hash, payload, timeout_msecs, max_retries, backoff_mode) = new_task.into_values();
 		let id = TaskId::from(uuid::Uuid::new_v4());
+		let now = SqliteDateTime(Utc::now());
 
-		let task = sqlx::query_as::<_, Self>(
-			"INSERT INTO backie_tasks (
+		let task = sqlx::query_as!(
+			Self,
+			r#"INSERT INTO backie_tasks (
                 id, task_name, queue_name, uniq_hash, payload, 
                 timeout_msecs, created_at, scheduled_at, 
                 max_retries, backoff_mode, retries
             )
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
-            RETURNING *",
+            RETURNING *"#,
+			id,
+			task_name,
+			queue_name,
+			uniq_hash,
+			payload,
+			timeout_msecs,
+			now,
+			now,
+			max_retries,
+			backoff_mode
 		)
-		.bind(id)
-		.bind(task_name)
-		.bind(queue_name)
-		.bind(uniq_hash)
-		.bind(payload)
-		.bind(timeout_msecs)
-		.bind(SqliteDateTime(Utc::now()))
-		.bind(SqliteDateTime(Utc::now()))
-		.bind(max_retries)
-		.bind(backoff_mode)
 		.fetch_one(connection)
 		.await?;
 
