@@ -4,18 +4,18 @@ use crate::{BackgroundTask, TaskStore};
 use sqlx::{Pool, Sqlite, SqlitePool};
 use std::time::Duration;
 
-/// An async queue that uses SQLite as storage for tasks.
+/// An async queue that uses `SQLite` as storage for tasks.
 #[derive(Debug, Clone)]
 pub struct SqliteTaskStore {
 	pool: Pool<Sqlite>,
 }
 
 impl SqliteTaskStore {
-	pub fn new(pool: Pool<Sqlite>) -> Self {
-		SqliteTaskStore { pool }
+	pub const fn new(pool: Pool<Sqlite>) -> Self {
+		Self { pool }
 	}
 
-	/// Create a new SQLite pool with the given connection string
+	/// Create a new `SQLite` pool with the given connection string
 	pub async fn create(database_url: &str) -> Result<Self, sqlx::Error> {
 		let pool = SqlitePool::connect(database_url).await?;
 		Ok(Self::new(pool))
@@ -30,7 +30,7 @@ impl TaskStore for SqliteTaskStore {
 		let mut tx = self.pool.begin().await.map_err(AsyncQueueError::from)?;
 
 		// Convert task_names array to a comma-separated string for SQL IN clause
-		let task_names_list = task_names.iter().map(|s| format!("'{}'", s)).collect::<Vec<_>>().join(",");
+		let task_names_list = task_names.iter().map(|s| format!("'{s}'")).collect::<Vec<_>>().join(",");
 
 		let timeout_clause = if let Some(timeout) = execution_timeout {
 			format!(
@@ -47,12 +47,11 @@ impl TaskStore for SqliteTaskStore {
             SELECT * FROM tasks
             WHERE queue_name = ?
             AND state = 'pending'
-            AND name IN ({})
-            {}
+            AND name IN ({task_names_list})
+            {timeout_clause}
             ORDER BY priority DESC, created_at ASC
             LIMIT 1
-            "#,
-			task_names_list, timeout_clause
+            "#
 		);
 
 		let task = sqlx::query_as::<_, Task>(&query)
@@ -64,12 +63,12 @@ impl TaskStore for SqliteTaskStore {
 		if let Some(task) = task {
 			// Update the task state to running
 			sqlx::query(
-				r#"
+				r"
                 UPDATE tasks
                 SET state = 'running',
                     last_execution_date = DATETIME('now')
                 WHERE id = ?
-                "#,
+                ",
 			)
 			.bind(task.id)
 			.execute(&mut *tx)
@@ -87,12 +86,12 @@ impl TaskStore for SqliteTaskStore {
 		match state {
 			TaskState::Done => {
 				sqlx::query(
-					r#"
+					r"
                     UPDATE tasks
                     SET state = 'done',
                         completed_at = DATETIME('now')
                     WHERE id = ?
-                    "#,
+                    ",
 				)
 				.bind(id)
 				.execute(&self.pool)
@@ -101,13 +100,13 @@ impl TaskStore for SqliteTaskStore {
 			}
 			TaskState::Failed(error_msg) => {
 				sqlx::query(
-					r#"
+					r"
                     UPDATE tasks
                     SET state = 'failed',
                         error = ?,
                         failed_at = DATETIME('now')
                     WHERE id = ?
-                    "#,
+                    ",
 				)
 				.bind(error_msg)
 				.bind(id)
@@ -122,10 +121,10 @@ impl TaskStore for SqliteTaskStore {
 
 	async fn remove_task(&self, id: TaskId) -> Result<u64, AsyncQueueError> {
 		let result = sqlx::query(
-			r#"
+			r"
             DELETE FROM tasks
             WHERE id = ?
-            "#,
+            ",
 		)
 		.bind(id)
 		.execute(&self.pool)
@@ -139,13 +138,13 @@ impl TaskStore for SqliteTaskStore {
 		let new_task = NewTask::new(task)?;
 
 		sqlx::query(
-			r#"
+			r"
             INSERT INTO tasks (
                 name, queue_name, priority, payload,
                 state, created_at
             )
             VALUES (?, ?, ?, ?, 'pending', DATETIME('now'))
-            "#,
+            ",
 		)
 		.bind(&new_task.task_name)
 		.bind(&new_task.queue_name)
@@ -166,11 +165,10 @@ impl TaskStore for SqliteTaskStore {
                 SET state = 'pending',
                     retry_count = retry_count + 1,
                     last_error = ?,
-                    next_retry_date = {}
+                    next_retry_date = {retry_at}
                 WHERE id = ?
                 RETURNING *
-                "#,
-			retry_at
+                "#
 		))
 		.bind(error)
 		.bind(id)

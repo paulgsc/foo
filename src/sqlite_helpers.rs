@@ -10,7 +10,7 @@ impl std::ops::Add<TimeDelta> for SqliteDateTime {
 	type Output = Self;
 
 	fn add(self, rhs: TimeDelta) -> Self::Output {
-		SqliteDateTime(self.0 + rhs)
+		Self(self.0 + rhs)
 	}
 }
 
@@ -30,6 +30,6 @@ impl<'r> Decode<'r, Sqlite> for SqliteDateTime {
 	fn decode(value: SqliteValueRef<'r>) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
 		let timestamp = <i64 as Decode<Sqlite>>::decode(value)?;
 		let datetime = Utc.timestamp_opt(timestamp, 0).single().ok_or("Invalid timestamp")?;
-		Ok(SqliteDateTime(datetime))
+		Ok(Self(datetime))
 	}
 }

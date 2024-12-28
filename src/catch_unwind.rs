@@ -6,12 +6,12 @@ use std::pin::Pin;
 use std::task::Context;
 use std::task::Poll;
 
-pub(crate) struct CatchUnwindFuture<F: Future + Send + 'static> {
+pub struct CatchUnwindFuture<F: Future + Send + 'static> {
 	inner: BoxFuture<'static, F::Output>,
 }
 
 impl<F: Future + Send + 'static> CatchUnwindFuture<F> {
-	pub fn create(f: F) -> CatchUnwindFuture<F> {
+	pub fn create(f: F) -> Self {
 		Self { inner: f.boxed() }
 	}
 }
@@ -34,7 +34,7 @@ fn catch_unwind<F: FnOnce() -> R, R>(f: F) -> Result<R, TaskExecError> {
 	match std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)) {
 		Ok(res) => Ok(res),
 		Err(cause) => match cause.downcast_ref::<&'static str>() {
-			Some(message) => Err(TaskExecError::Panicked(message.to_string())),
+			Some(message) => Err(TaskExecError::Panicked((*message).to_string())),
 			None => match cause.downcast_ref::<String>() {
 				Some(message) => Err(TaskExecError::Panicked(message.to_string())),
 				None => Err(TaskExecError::Panicked("Sorry, unknown panic message".to_string())),
