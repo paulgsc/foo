@@ -6,12 +6,14 @@ use sqlx::SqliteConnection;
 use std::time::Duration;
 
 impl Task {
+	#[allow(dead_code)]
 	pub(crate) async fn remove(connection: &mut SqliteConnection, id: TaskId) -> Result<u64, AsyncQueueError> {
 		let result = sqlx::query("DELETE FROM backie_tasks WHERE id = ?").bind(id).execute(connection).await?;
 
 		Ok(result.rows_affected())
 	}
 
+	#[allow(dead_code)]
 	pub(crate) async fn fail_with_message(connection: &mut SqliteConnection, id: TaskId, error_message: &str) -> Result<Self, AsyncQueueError> {
 		let error = serde_json::json!({
 				"error": error_message,
@@ -34,6 +36,7 @@ impl Task {
 		Ok(task)
 	}
 
+	#[allow(dead_code)]
 	pub(crate) async fn schedule_retry(connection: &mut SqliteConnection, id: TaskId, backoff: Duration, error_message: &str) -> Result<Self, AsyncQueueError> {
 		let error = serde_json::json!({
 				"error": error_message,
@@ -59,6 +62,7 @@ impl Task {
 		Ok(task)
 	}
 
+	#[allow(dead_code)]
 	pub(crate) async fn fetch_next_pending(connection: &mut SqliteConnection, queue_name: &str, execution_timeout: Option<Duration>, task_names: &[String]) -> Option<Self> {
 		let now = SqliteDateTime(Utc::now());
 		let query = match execution_timeout {
@@ -98,6 +102,7 @@ impl Task {
 		query.fetch_optional(connection).await.ok().flatten()
 	}
 
+	#[allow(dead_code)]
 	pub(crate) async fn set_running(connection: &mut SqliteConnection, task: Self) -> Result<Self, AsyncQueueError> {
 		let now = SqliteDateTime(Utc::now());
 		let task = sqlx::query_as::<_, Self>(
@@ -114,6 +119,7 @@ impl Task {
 		Ok(task)
 	}
 
+	#[allow(dead_code)]
 	pub(crate) async fn set_done(connection: &mut SqliteConnection, id: TaskId) -> Result<Self, AsyncQueueError> {
 		let now = SqliteDateTime(Utc::now());
 		let task = sqlx::query_as::<_, Self>(
@@ -130,6 +136,7 @@ impl Task {
 		Ok(task)
 	}
 
+	#[allow(dead_code)]
 	pub(crate) async fn insert(connection: &mut SqliteConnection, new_task: NewTask) -> Result<Self, AsyncQueueError> {
 		let (task_name, queue_name, uniq_hash, payload, timeout_msecs, max_retries, backoff_mode) = new_task.into_values();
 		let id = TaskId::from(uuid::Uuid::new_v4());
