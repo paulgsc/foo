@@ -24,6 +24,7 @@ futures = "0.3"
 diesel = { version = "2.1", features = ["serde_json", "chrono", "uuid"] }
 diesel-derive-newtype = "2.0.0-rc.0"
 diesel-async = { version = "0.3", features = ["postgres", "bb8"], optional = true }
+sqlx = { workspace = true, features = ["runtime-tokio", "sqlite", "macros"] }
 tokio = { version = "1.25", features = ["rt", "time", "macros", "sync"] }
 
 [dev-dependencies]
