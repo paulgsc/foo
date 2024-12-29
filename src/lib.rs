@@ -92,7 +92,7 @@ pub mod errors;
 mod queries;
 mod runnable;
 #[cfg(feature = "async_postgres")]
-mod schema;
+// mod schema;
 mod sqlite_helpers;
 mod sqlite_task;
 mod store;
