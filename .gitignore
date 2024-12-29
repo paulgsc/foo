@@ -3,3 +3,9 @@ Cargo.lock
 docs/content/docs/CHANGELOG.md
 docs/content/docs/README.md
 .DS_Store
+
+# DATABASE
+*.db
+*.db-*
+
+.env
