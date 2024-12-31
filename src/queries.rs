@@ -18,7 +18,7 @@ impl Task {
 		let error = serde_json::json!({
 				"error": error_message,
 		});
-		let now = SqliteDateTime(Utc::now());
+		let now = SqliteDateTime::now().timestamp();
 
 		let task = sqlx::query_as!(
 			Self,
