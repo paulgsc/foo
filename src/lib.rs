@@ -1,11 +1,11 @@
 //#![warn(missing_docs)]
 #![forbid(unsafe_code)]
 #![doc = include_str!("../README.md")]
-use sqlx::{
-	encode::IsNull,
-	sqlite::{Sqlite, SqliteArgumentValue, SqliteTypeInfo, SqliteValueRef},
-	Decode, Encode, Type,
-};
+use crate::sqlite_helpers::SqliteValidate;
+use sqlite_macros::SqliteType;
+use sqlx::{sqlite::Sqlite, Decode, Encode, Type};
+use std::fmt;
+use std::str::FromStr;
 use std::time::Duration;
 
 /// All possible options for retaining tasks in the db after their execution.
@@ -30,13 +30,22 @@ impl Default for RetentionMode {
 }
 
 /// All possible options for backoff between task retries.
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Hash, serde::Serialize, serde::Deserialize, SqliteType)]
 pub enum BackoffMode {
 	/// No backoff, retry immediately
 	NoBackoff,
 
 	/// Exponential backoff
 	ExponentialBackoff,
+}
+
+impl fmt::Display for BackoffMode {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		match self {
+			Self::NoBackoff => write!(f, "NoBackoff"),
+			Self::ExponentialBackoff => write!(f, "ExponentialBackoff"),
+		}
+	}
 }
 
 impl Default for BackoffMode {
@@ -54,26 +63,29 @@ impl BackoffMode {
 	}
 }
 
-impl Type<Sqlite> for BackoffMode {
-	fn type_info() -> SqliteTypeInfo {
-		<serde_json::Value as Type<Sqlite>>::type_info()
-	}
-}
+impl FromStr for BackoffMode {
+	type Err = sqlx::Error;
 
-impl Encode<'_, Sqlite> for BackoffMode {
-	fn encode_by_ref(&self, args: &mut Vec<SqliteArgumentValue<'_>>) -> IsNull {
-		match serde_json::to_value(self) {
-			Ok(value) => value.encode_by_ref(args),
-			Err(_) => IsNull::Yes,
+	fn from_str(s: &str) -> Result<Self, Self::Err> {
+		match s.to_lowercase().as_str() {
+			"nobackoff" => Ok(Self::NoBackoff),
+			"exponentialbackoff" => Ok(Self::ExponentialBackoff),
+			_ => Err(sqlx::Error::Protocol("Invalid backoff mode".into())),
 		}
 	}
 }
 
-impl<'r> Decode<'r, Sqlite> for BackoffMode {
-	fn decode(value: SqliteValueRef<'r>) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
-		let json_value = <serde_json::Value as Decode<Sqlite>>::decode(value)?;
-		let backoff_mode: Self = serde_json::from_value(json_value)?;
-		Ok(backoff_mode)
+impl From<String> for BackoffMode {
+	fn from(s: String) -> Self {
+		Self::from_str(s.as_str()).unwrap_or(Self::NoBackoff)
+	}
+}
+
+impl SqliteValidate for BackoffMode {
+	type Error = sqlx::Error;
+
+	fn validate(s: &str) -> Result<(), Self::Error> {
+		Self::from_str(s).map(|_| ())
 	}
 }
 
