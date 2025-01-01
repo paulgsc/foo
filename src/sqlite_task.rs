@@ -4,7 +4,7 @@ use crate::BackoffMode;
 use serde::{Deserialize, Serialize};
 use sqlite_macros::SqliteType;
 use sqlx::sqlite::SqliteRow;
-use sqlx::{Decode, Encode, Error, FromRow, Row, Sqlite, Type};
+use sqlx::{Error, FromRow, Row};
 use std::borrow::Cow;
 use std::fmt;
 use std::str::FromStr;
@@ -215,7 +215,7 @@ pub struct NewTask {
 	pub(crate) uniq_hash: Option<TaskHash>,
 	pub(crate) payload: serde_json::Value,
 	pub(crate) timeout_msecs: i64,
-	pub(crate) max_retries: i64,
+	pub(crate) max_retries: i32,
 	pub(crate) backoff_mode: BackoffMode,
 }
 
@@ -243,7 +243,7 @@ impl NewTask {
 	}
 
 	#[must_use]
-	pub fn into_values(self) -> (String, String, Option<TaskHash>, serde_json::Value, i64, i64, BackoffMode) {
+	pub fn into_values(self) -> (String, String, Option<TaskHash>, serde_json::Value, i64, i32, BackoffMode) {
 		(
 			self.task_name,
 			self.queue_name,
