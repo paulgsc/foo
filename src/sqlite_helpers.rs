@@ -1,7 +1,6 @@
 use chrono::{DateTime, TimeDelta, TimeZone, Utc};
 use serde_json::Value;
 use sqlite_macros::SqliteType;
-use sqlx::{Decode, Encode, Sqlite, Type};
 use std::fmt;
 use std::str::FromStr;
 

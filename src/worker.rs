@@ -141,7 +141,8 @@ where
 			Ok(()) => self.finalize_task(task, result).await?,
 			Err(error) => {
 				if task.retries < task.max_retries {
-					let backoff = task.backoff_mode.next_attempt(task.retries);
+					let retries_i32 = i32::try_from(task.retries).unwrap();
+					let backoff = task.backoff_mode.next_attempt(retries_i32);
 
 					log::debug!("Task {} failed to run and will be retried in {} seconds", task.id, backoff.as_secs());
 

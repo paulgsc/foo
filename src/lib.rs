@@ -3,7 +3,6 @@
 #![doc = include_str!("../README.md")]
 use crate::sqlite_helpers::SqliteValidate;
 use sqlite_macros::SqliteType;
-use sqlx::{sqlite::Sqlite, Decode, Encode, Type};
 use std::fmt;
 use std::str::FromStr;
 use std::time::Duration;
