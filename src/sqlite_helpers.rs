@@ -1,11 +1,25 @@
 use chrono::{DateTime, TimeDelta, TimeZone, Utc};
 use serde_json::Value;
-use sqlx::encode::IsNull;
-use sqlx::sqlite::{SqliteArgumentValue, SqliteTypeInfo, SqliteValueRef};
-use sqlx::{Decode, Encode, Sqlite, Type, TypeInfo, ValueRef};
+use sqlite_macros::SqliteType;
+use sqlx::{Decode, Encode, Sqlite, Type};
+use std::fmt;
+use std::str::FromStr;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub trait SqliteValidate {
+	type Error;
+	fn validate(s: &str) -> Result<(), Self::Error>;
+}
+
+// Use the derived macro for SqliteDateTime
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, SqliteType)]
+#[sqlite_type(validate, max_length = "20")]
 pub struct SqliteDateTime(pub DateTime<Utc>);
+
+impl fmt::Display for SqliteDateTime {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		write!(f, "{}", self.timestamp())
+	}
+}
 
 impl SqliteDateTime {
 	pub(crate) fn now() -> Self {
@@ -14,6 +28,22 @@ impl SqliteDateTime {
 
 	pub(crate) fn timestamp(&self) -> i64 {
 		self.0.timestamp()
+	}
+}
+
+impl FromStr for SqliteDateTime {
+	type Err = sqlx::Error;
+
+	fn from_str(s: &str) -> Result<Self, Self::Err> {
+		let timestamp = s.parse::<i64>().map_err(|_| sqlx::Error::Protocol("Invalid timestamp format".into()))?;
+
+		if timestamp < 0 {
+			return Err(sqlx::Error::Protocol("Timestamp cannot be negative".into()));
+		}
+
+		let datetime = Utc.timestamp_opt(timestamp, 0).single().ok_or_else(|| sqlx::Error::Protocol("Invalid timestamp".into()))?;
+
+		Ok(Self(datetime))
 	}
 }
 
@@ -32,68 +62,55 @@ impl std::ops::Add<TimeDelta> for SqliteDateTime {
 	}
 }
 
-impl Type<Sqlite> for SqliteDateTime {
-	fn type_info() -> SqliteTypeInfo {
-		<i64 as Type<Sqlite>>::type_info()
-	}
+impl SqliteValidate for SqliteDateTime {
+	type Error = sqlx::Error;
 
-	fn compatible(ty: &SqliteTypeInfo) -> bool {
-		*ty == <i64 as Type<Sqlite>>::type_info() || ty.name().to_lowercase().contains("datetime") || ty.name().to_lowercase().contains("timestamp")
-	}
-}
-
-impl Encode<'_, Sqlite> for SqliteDateTime {
-	fn encode_by_ref(&self, args: &mut Vec<SqliteArgumentValue<'_>>) -> IsNull {
-		args.push(SqliteArgumentValue::Int64(self.timestamp()));
-		IsNull::No
-	}
-}
-
-impl<'r> Decode<'r, Sqlite> for SqliteDateTime {
-	fn decode(value: SqliteValueRef<'r>) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
-		let timestamp = match value.type_info().name().to_lowercase().as_str() {
-			"datetime" | "timestamp" => value.int64()?,
-			_ => return Err("Unexpected type for datetime column".into()),
-		};
-
-		let datetime = Utc.timestamp_opt(timestamp, 0).single().ok_or("Invalid timestamp")?;
-
-		Ok(Self(datetime))
-	}
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct OptionalSqliteDateTime(pub Option<SqliteDateTime>);
-
-impl Type<Sqlite> for OptionalSqliteDateTime {
-	fn type_info() -> SqliteTypeInfo {
-		<i64 as Type<Sqlite>>::type_info()
-	}
-
-	fn compatible(ty: &SqliteTypeInfo) -> bool {
-		*ty == <i64 as Type<Sqlite>>::type_info() || ty.name().to_lowercase().contains("datetime") || ty.name().to_lowercase().contains("timestamp")
-	}
-}
-
-impl Encode<'_, Sqlite> for OptionalSqliteDateTime {
-	fn encode_by_ref(&self, args: &mut Vec<SqliteArgumentValue<'_>>) -> IsNull {
-		match self.0 {
-			Some(ref dt) => dt.encode_by_ref(args),
-			None => IsNull::Yes,
+	fn validate(s: &str) -> Result<(), Self::Error> {
+		match s.parse::<i64>() {
+			Ok(timestamp) => {
+				if timestamp < 0 {
+					return Err(sqlx::Error::Protocol("Timestamp cannot be negative".into()));
+				}
+				match Utc.timestamp_opt(timestamp, 0).single() {
+					Some(_) => Ok(()),
+					None => Err(sqlx::Error::Protocol("Invalid timestamp".into())),
+				}
+			}
+			Err(_) => Err(sqlx::Error::Protocol("Invalid timestamp format".into())),
 		}
 	}
 }
 
-impl<'r> Decode<'r, Sqlite> for OptionalSqliteDateTime {
-	fn decode(value: SqliteValueRef<'r>) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
-		let timestamp = match value.type_info().name().to_lowercase().as_str() {
-			"datetime" | "timestamp" => value.int64().ok(),
-			_ => None,
-		};
+// Use the derived macro for OptionalSqliteDateTime
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, SqliteType)]
+pub struct OptionalSqliteDateTime(pub Option<SqliteDateTime>);
 
-		let datetime = timestamp.and_then(|ts| Utc.timestamp_opt(ts, 0).single());
+impl fmt::Display for OptionalSqliteDateTime {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		match self.0 {
+			Some(dt) => write!(f, "{}", dt),
+			None => write!(f, "NULL"),
+		}
+	}
+}
 
-		Ok(Self(datetime.map(SqliteDateTime)))
+impl SqliteValidate for OptionalSqliteDateTime {
+	type Error = sqlx::Error;
+
+	fn validate(s: &str) -> Result<(), Self::Error> {
+		SqliteDateTime::validate(s)
+	}
+}
+
+impl FromStr for OptionalSqliteDateTime {
+	type Err = sqlx::Error;
+
+	fn from_str(s: &str) -> Result<Self, Self::Err> {
+		if s.is_empty() {
+			Ok(Self(None))
+		} else {
+			SqliteDateTime::from_str(s).map(|dt| Self(Some(dt)))
+		}
 	}
 }
 
@@ -121,8 +138,40 @@ impl From<Option<i32>> for OptionalSqliteDateTime {
 	}
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+// Use the derived macro for OptionalJsonValue
+#[derive(Debug, Clone, PartialEq, Eq, SqliteType)]
 pub struct OptionalJsonValue(pub Option<Value>);
+
+impl fmt::Display for OptionalJsonValue {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		match &self.0 {
+			Some(value) => match serde_json::to_string(value) {
+				Ok(json_str) => write!(f, "{}", json_str),
+				Err(_) => write!(f, "null"),
+			},
+			None => write!(f, "null"),
+		}
+	}
+}
+
+impl SqliteValidate for OptionalJsonValue {
+	type Error = sqlx::Error;
+
+	fn validate(s: &str) -> Result<(), Self::Error> {
+		Self::from_str(s).map(|_| ())
+	}
+}
+
+impl FromStr for OptionalJsonValue {
+	type Err = sqlx::Error;
+
+	fn from_str(s: &str) -> Result<Self, Self::Err> {
+		match serde_json::from_str(s) {
+			Ok(value) => Ok(OptionalJsonValue(Some(value))),
+			Err(e) => Err(sqlx::Error::Protocol(e.to_string())),
+		}
+	}
+}
 
 impl From<String> for OptionalJsonValue {
 	fn from(s: String) -> Self {
@@ -137,36 +186,5 @@ impl From<Option<String>> for OptionalJsonValue {
 			Some(value) => OptionalJsonValue::from(value),
 			None => OptionalJsonValue(None),
 		}
-	}
-}
-
-impl Type<Sqlite> for OptionalJsonValue {
-	fn type_info() -> SqliteTypeInfo {
-		<&str as Type<Sqlite>>::type_info()
-	}
-}
-
-impl Encode<'_, Sqlite> for OptionalJsonValue {
-	fn encode_by_ref(&self, args: &mut Vec<SqliteArgumentValue<'_>>) -> IsNull {
-		match &self.0 {
-			Some(value) => {
-				let json_str = value.to_string();
-				args.push(SqliteArgumentValue::Text(Box::leak(json_str.into_boxed_str())));
-				IsNull::No
-			}
-			None => IsNull::Yes,
-		}
-	}
-}
-
-impl<'r> Decode<'r, Sqlite> for OptionalJsonValue {
-	fn decode(value: SqliteValueRef<'r>) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
-		if value.is_null() {
-			return Ok(Self(None));
-		}
-
-		let text = value.text()?;
-		let json_value = serde_json::from_str(text)?;
-		Ok(Self(Some(json_value)))
 	}
 }

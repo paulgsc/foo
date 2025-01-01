@@ -1,14 +1,17 @@
+use crate::sqlite_helpers::SqliteValidate;
 use crate::sqlite_helpers::{OptionalJsonValue, OptionalSqliteDateTime, SqliteDateTime};
 use crate::BackoffMode;
 use serde::{Deserialize, Serialize};
-use sqlx::database::HasArguments;
-use sqlx::encode::IsNull;
-use sqlx::sqlite::{SqliteRow, SqliteTypeInfo, SqliteValueRef};
+use sqlite_macros::SqliteType;
+use sqlx::sqlite::SqliteRow;
 use sqlx::{Decode, Encode, Error, FromRow, Row, Sqlite, Type};
 use std::borrow::Cow;
+use std::fmt;
 use std::str::FromStr;
 use std::time::Duration;
 use uuid::Uuid;
+
+// use sqlx::sqlite::{SqliteArgumentValue, SqliteTypeInfo, SqliteValueRef};
 
 /// States of a task.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -19,11 +22,12 @@ pub enum TaskState {
 	Done,
 }
 
-#[derive(Clone, Copy, Debug, Ord, PartialOrd, Hash, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Ord, PartialOrd, Hash, PartialEq, Eq, Serialize, Deserialize, SqliteType)]
+#[sqlite_type(validate = true, error = "Invalid UUID format")]
 pub struct TaskId(Uuid);
 
-impl std::fmt::Display for TaskId {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for TaskId {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		write!(f, "{}", self.0)
 	}
 }
@@ -54,44 +58,31 @@ impl From<String> for TaskId {
 	}
 }
 
-impl Type<Sqlite> for TaskId {
-	fn type_info() -> SqliteTypeInfo {
-		<&str as Type<Sqlite>>::type_info()
-	}
-}
-
-impl Encode<'_, Sqlite> for TaskId {
-	fn encode_by_ref(&self, buf: &mut <Sqlite as HasArguments>::ArgumentBuffer) -> IsNull {
-		<std::string::String as Encode<'_, Sqlite>>::encode(self.0.to_string(), buf)
-	}
-}
-
-impl<'r> Decode<'r, Sqlite> for TaskId {
-	fn decode(value: SqliteValueRef<'r>) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
-		let s = <String as Decode<Sqlite>>::decode(value)?;
-		Ok(Self(Uuid::parse_str(&s)?))
-	}
-}
-
-impl Encode<'_, Sqlite> for TaskHash {
-	fn encode_by_ref(&self, buf: &mut <Sqlite as HasArguments>::ArgumentBuffer) -> IsNull {
-		self.0.clone().encode(buf)
-	}
-}
-
-impl<'r> Decode<'r, Sqlite> for TaskHash {
-	fn decode(value: SqliteValueRef<'r>) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
-		let s = <String as Decode<Sqlite>>::decode(value)?;
-		Ok(Self::new(s))
-	}
-}
-
-#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize, SqliteType)]
+#[sqlite_type(validate = true)]
 pub struct TaskHash(Cow<'static, str>);
+
+impl std::fmt::Display for TaskHash {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		write!(f, "{}", self.0)
+	}
+}
 
 impl TaskHash {
 	pub fn new<T: Into<String>>(hash: T) -> Self {
 		Self(Cow::Owned(hash.into()))
+	}
+}
+
+impl FromStr for TaskHash {
+	type Err = sqlx::Error;
+
+	fn from_str(s: &str) -> Result<Self, Self::Err> {
+		if s.is_empty() {
+			Err(Error::Protocol("TaskHash cannot be empty".into()))
+		} else {
+			Ok(TaskHash(Cow::Owned(s.to_string())))
+		}
 	}
 }
 
@@ -113,14 +104,30 @@ impl AsRef<str> for TaskHash {
 	}
 }
 
-impl Type<Sqlite> for TaskHash {
-	fn type_info() -> SqliteTypeInfo {
-		<&str as Type<Sqlite>>::type_info()
+impl SqliteValidate for TaskHash {
+	type Error = sqlx::Error;
+
+	fn validate(s: &str) -> Result<(), sqlx::Error> {
+		if s.is_empty() {
+			Err(sqlx::Error::Protocol("TaskHash cannot be empty".into()))
+		} else {
+			Ok(())
+		}
 	}
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, SqliteType)]
+#[sqlite_type(validate = true)]
 pub struct OptionalTaskHash(pub Option<TaskHash>);
+
+impl std::fmt::Display for OptionalTaskHash {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		match &self.0 {
+			Some(t) => write!(f, "{}", t),
+			None => write!(f, "NULL"),
+		}
+	}
+}
 
 impl From<Option<String>> for OptionalTaskHash {
 	fn from(option: Option<String>) -> Self {
@@ -128,28 +135,15 @@ impl From<Option<String>> for OptionalTaskHash {
 	}
 }
 
-impl Type<Sqlite> for OptionalTaskHash {
-	fn type_info() -> SqliteTypeInfo {
-		<&str as Type<Sqlite>>::type_info()
-	}
-}
+impl FromStr for OptionalTaskHash {
+	type Err = sqlx::Error;
 
-impl Encode<'_, Sqlite> for OptionalTaskHash {
-	fn encode_by_ref(&self, buf: &mut <Sqlite as HasArguments>::ArgumentBuffer) -> IsNull {
-		match &self.0 {
-			Some(hash) => {
-				hash.encode_by_ref(buf);
-				IsNull::No
-			}
-			None => IsNull::Yes,
+	fn from_str(s: &str) -> Result<Self, Self::Err> {
+		if s.is_empty() {
+			Ok(Self(None))
+		} else {
+			TaskHash::from_str(s).map(|hash| Self(Some(hash)))
 		}
-	}
-}
-
-impl<'r> Decode<'r, Sqlite> for OptionalTaskHash {
-	fn decode(value: SqliteValueRef<'r>) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
-		let text: Option<String> = <Option<String> as Decode<Sqlite>>::decode(value)?;
-		Ok(Self(text.map(TaskHash::from)))
 	}
 }
 
@@ -170,8 +164,8 @@ pub struct Task {
 	#[sqlx(rename = "done_at")]
 	pub done_at: OptionalSqliteDateTime,
 	pub error_info: OptionalJsonValue,
-	pub retries: i32,
-	pub max_retries: i32,
+	pub retries: i64,
+	pub max_retries: i64,
 	pub backoff_mode: BackoffMode,
 }
 
@@ -221,7 +215,7 @@ pub struct NewTask {
 	pub(crate) uniq_hash: Option<TaskHash>,
 	pub(crate) payload: serde_json::Value,
 	pub(crate) timeout_msecs: i64,
-	pub(crate) max_retries: i32,
+	pub(crate) max_retries: i64,
 	pub(crate) backoff_mode: BackoffMode,
 }
 
@@ -249,7 +243,7 @@ impl NewTask {
 	}
 
 	#[must_use]
-	pub fn into_values(self) -> (String, String, Option<TaskHash>, serde_json::Value, i64, i32, BackoffMode) {
+	pub fn into_values(self) -> (String, String, Option<TaskHash>, serde_json::Value, i64, i64, BackoffMode) {
 		(
 			self.task_name,
 			self.queue_name,
@@ -265,7 +259,7 @@ impl NewTask {
 #[derive(Debug, Clone, Copy)]
 pub struct CurrentTask {
 	id: TaskId,
-	retries: i32,
+	retries: i64,
 	created_at: SqliteDateTime,
 }
 
@@ -285,7 +279,7 @@ impl CurrentTask {
 	}
 
 	#[must_use]
-	pub const fn retry_count(&self) -> i32 {
+	pub const fn retry_count(&self) -> i64 {
 		self.retries
 	}
 
