@@ -96,6 +96,7 @@ pub use worker_pool::{QueueConfig, WorkerPool};
 
 // #[cfg(feature = "async_postgres")]
 // pub use store::PgTaskStore;
+pub use store::SqliteTaskStore;
 
 mod catch_unwind;
 pub mod errors;
