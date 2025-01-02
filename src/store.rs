@@ -10,6 +10,8 @@ mod sqlite_task_store;
 
 // #[cfg(feature = "async_postgres")]
 // pub use self::pg_task_store::*;
+#[allow(unused_imports)]
+pub use self::sqlite_task_store::*;
 
 /// A trait that is used to enqueue tasks for a given connection type
 #[async_trait::async_trait]
@@ -140,7 +142,7 @@ pub trait TaskStore: Send + Sync + 'static {
 	async fn remove_task(&self, id: TaskId) -> Result<u64, AsyncQueueError>;
 	async fn schedule_task_retry(&self, id: TaskId, backoff: Duration, error: &str) -> Result<Task, AsyncQueueError>;
 
-	async fn enqueue<T: BackgroundTask>(conn: &Self::Connection, task: T) -> Result<(), AsyncQueueError>
+	async fn enqueue<T: BackgroundTask>(conn: &mut Self::Connection, task: T) -> Result<(), AsyncQueueError>
 	where
 		Self: Sized;
 }
