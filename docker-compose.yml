@@ -1,0 +1,13 @@
+version: '3.8'
+services:
+  metabase:
+    image: metabase/metabase
+    container_name: metabase
+    ports:
+      - "3000:3000"
+    volumes:
+      - /mnt/storage/users/dev/databases/backie/metabase-data:/metabase-data
+      - /mnt/storage/users/dev/databases/backie:/data
+    environment:
+      - MB_DB_FILE=/metabase-data/metabase.db
+
