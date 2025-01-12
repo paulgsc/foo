@@ -1,18 +1,18 @@
 use crate::errors::AsyncQueueError;
 use crate::sqlite_task::{NewTask, Task, TaskId, TaskState};
 use crate::{BackgroundTask, TaskStore};
-use sqlx::{Acquire, Pool, Sqlite, SqliteConnection, SqlitePool};
+use sqlx::{Acquire, SqliteConnection, SqlitePool};
 use std::time::Duration;
 
 /// An async queue that uses `SQLite` as storage for tasks.
 #[derive(Debug, Clone)]
 pub struct SqliteTaskStore {
-	pub pool: Pool<Sqlite>,
+	pub pool: SqlitePool,
 }
 
 impl SqliteTaskStore {
 	#[allow(dead_code)]
-	pub const fn new(pool: Pool<Sqlite>) -> Self {
+	pub const fn new(pool: SqlitePool) -> Self {
 		Self { pool }
 	}
 

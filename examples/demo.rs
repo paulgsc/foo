@@ -2,7 +2,6 @@ use async_trait::async_trait;
 use foo::{BackgroundTask, BackgroundTaskExt, CurrentTask, QueueConfig, RetentionMode};
 use foo::{SqliteTaskStore, WorkerPool};
 use serde::{Deserialize, Serialize};
-use sqlx::{Pool, Sqlite};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
@@ -94,7 +93,8 @@ impl BackgroundTask for EmptyTask {
 	type AppData = MyApplicationContext;
 	type Error = anyhow::Error;
 
-	async fn run(&self, _task: CurrentTask, _ctx: Self::AppData) -> Result<(), Self::Error> {
+	async fn run(&self, task: CurrentTask, _ctx: Self::AppData) -> Result<(), Self::Error> {
+		log::info!("[{}] empty task done..", task.id());
 		Ok(())
 	}
 }
@@ -122,7 +122,7 @@ async fn main() -> anyhow::Result<()> {
 	// Create SQLite database file and pool
 	let database_url = "sqlite:tasks.db";
 	let task_store = SqliteTaskStore::create(database_url).await?;
-	let pool = task_store.pool().clone();
+	let pool = task_store.pool.clone();
 
 	log::info!("Pool created ...");
 
@@ -139,8 +139,9 @@ async fn main() -> anyhow::Result<()> {
 		tasks.spawn({
 			let pool = pool.clone();
 			async move {
+				let mut conn = pool.acquire().await.unwrap();
 				let task = EmptyTask { idx: i };
-				task.enqueue::<SqliteTaskStore>(&mut pool).await.unwrap();
+				task.enqueue::<SqliteTaskStore>(&mut conn).await.unwrap();
 			}
 		});
 	}
@@ -149,7 +150,8 @@ async fn main() -> anyhow::Result<()> {
 		let _ = result?;
 	}
 
-	(FinalTask {}).enqueue::<SqliteTaskStore>(&mut pool).await.unwrap();
+	let mut conn = pool.acquire().await.unwrap();
+	(FinalTask {}).enqueue::<SqliteTaskStore>(&mut conn).await.unwrap();
 	log::info!("Tasks created ...");
 
 	let started = Instant::now();
