@@ -1,5 +1,5 @@
 use crate::sqlite_helpers::SqliteValidate;
-use crate::sqlite_helpers::{OptionalJsonValue, OptionalSqliteDateTime, SqliteDateTime};
+use crate::sqlite_helpers::{JsonField, OptionalJsonValue, OptionalSqliteDateTime, SqliteDateTime};
 use crate::BackoffMode;
 use serde::{Deserialize, Serialize};
 use sqlite_macros::SqliteType;
@@ -152,7 +152,7 @@ pub struct Task {
 	pub task_name: String,
 	pub queue_name: String,
 	pub uniq_hash: OptionalTaskHash,
-	pub payload: serde_json::Value,
+	pub payload: JsonField,
 	pub timeout_msecs: i64,
 	#[sqlx(rename = "created_at")]
 	pub created_at: SqliteDateTime,
