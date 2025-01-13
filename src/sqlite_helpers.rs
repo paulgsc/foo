@@ -1,4 +1,5 @@
 use chrono::{DateTime, TimeDelta, TimeZone, Utc};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlite_macros::SqliteType;
 use std::fmt;
@@ -185,5 +186,31 @@ impl From<Option<String>> for OptionalJsonValue {
 			Some(value) => OptionalJsonValue::from(value),
 			None => OptionalJsonValue(None),
 		}
+	}
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq, SqliteType)]
+pub struct JsonField(pub serde_json::Value);
+
+impl fmt::Display for JsonField {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		match serde_json::to_string(&self.0) {
+			Ok(s) => write!(f, "{}", s),
+			Err(e) => write!(f, "{{\"error\": \"{}\"}}", e),
+		}
+	}
+}
+
+impl FromStr for JsonField {
+	type Err = serde_json::Error;
+
+	fn from_str(s: &str) -> Result<Self, Self::Err> {
+		serde_json::from_str(s).map(JsonField)
+	}
+}
+
+impl From<String> for JsonField {
+	fn from(s: String) -> Self {
+		serde_json::from_str(&s).unwrap_or_else(|e| panic!("Failed to parse JSON string: {}. Error: {}", s, e))
 	}
 }

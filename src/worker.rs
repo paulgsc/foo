@@ -1,6 +1,7 @@
 use crate::catch_unwind::CatchUnwindFuture;
 use crate::errors::{AsyncQueueError, BackieError};
 use crate::runnable::BackgroundTask;
+use crate::sqlite_helpers::JsonField;
 use crate::sqlite_task::{CurrentTask, Task, TaskState};
 use crate::store::TaskStore;
 use crate::{QueueConfig, RetentionMode};
@@ -11,7 +12,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 
-pub type ExecuteTaskFn<AppData> = Arc<dyn Fn(CurrentTask, serde_json::Value, AppData) -> Pin<Box<dyn Future<Output = Result<(), TaskExecError>> + Send>> + Send + Sync>;
+pub type ExecuteTaskFn<AppData> = Arc<dyn Fn(CurrentTask, JsonField, AppData) -> Pin<Box<dyn Future<Output = Result<(), TaskExecError>> + Send>> + Send + Sync>;
 
 pub type StateFn<AppData> = Arc<dyn Fn() -> AppData + Send + Sync>;
 
@@ -27,12 +28,12 @@ pub enum TaskExecError {
 	Panicked(String),
 }
 
-pub fn runnable<BT>(task_info: CurrentTask, payload: serde_json::Value, app_context: BT::AppData) -> Pin<Box<dyn Future<Output = Result<(), TaskExecError>> + Send>>
+pub fn runnable<BT>(task_info: CurrentTask, payload: JsonField, app_context: BT::AppData) -> Pin<Box<dyn Future<Output = Result<(), TaskExecError>> + Send>>
 where
 	BT: BackgroundTask,
 {
 	Box::pin(async move {
-		let background_task: BT = serde_json::from_value(payload)?;
+		let background_task: BT = serde_json::from_value(payload.0)?;
 		match background_task.run(task_info, app_context).await {
 			Ok(()) => Ok(()),
 			Err(err) => Err(TaskExecError::ExecutionFailed(format!("{err:?}"))),
