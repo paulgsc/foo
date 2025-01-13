@@ -3,8 +3,7 @@ use crate::sqlite_helpers::{OptionalJsonValue, OptionalSqliteDateTime, SqliteDat
 use crate::BackoffMode;
 use serde::{Deserialize, Serialize};
 use sqlite_macros::SqliteType;
-use sqlx::sqlite::SqliteRow;
-use sqlx::{Error, FromRow, Row};
+use sqlx::{Error, FromRow};
 use std::borrow::Cow;
 use std::fmt;
 use std::str::FromStr;
@@ -178,33 +177,6 @@ impl Task {
 			(None, _) if self.running_at.0.is_some() => TaskState::Running,
 			_ => TaskState::Ready,
 		}
-	}
-}
-
-impl TryFrom<SqliteRow> for Task {
-	type Error = sqlx::Error;
-
-	fn try_from(row: SqliteRow) -> Result<Self, Self::Error> {
-		let id = row
-			.try_get::<String, _>("id")
-			.and_then(|id| Uuid::parse_str(&id).map_err(|e| Error::Protocol(format!("Invalid UUID: {e}"))).map(TaskId::from))?;
-
-		Ok(Self {
-			id,
-			task_name: row.try_get("task_name")?,
-			queue_name: row.try_get("queue_name")?,
-			uniq_hash: row.try_get("uniq_hash")?,
-			payload: row.try_get("payload")?,
-			timeout_msecs: row.try_get("timeout_msecs")?,
-			created_at: row.try_get("created_at")?,
-			scheduled_at: row.try_get("scheduled_at")?,
-			running_at: row.try_get("running_at")?,
-			done_at: row.try_get("done_at")?,
-			error_info: row.try_get("error_info")?,
-			retries: row.try_get("retries")?,
-			max_retries: row.try_get("max_retries")?,
-			backoff_mode: row.try_get("backoff_mode")?,
-		})
 	}
 }
 
