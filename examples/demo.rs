@@ -120,8 +120,9 @@ async fn main() -> anyhow::Result<()> {
 	env_logger::init();
 
 	// Create SQLite database file and pool
-	let database_url = "sqlite:tasks.db";
-	let task_store = SqliteTaskStore::create(database_url).await?;
+	const STORAGE: &str = "/mnt/storage/users/dev/databases/backie";
+	let database_url = format!("sqlite://{}/backie_tasks.db", STORAGE);
+	let task_store = SqliteTaskStore::create(database_url.as_str()).await?;
 	let pool = task_store.pool.clone();
 
 	log::info!("Pool created ...");
@@ -135,7 +136,7 @@ async fn main() -> anyhow::Result<()> {
 	// Store all tasks to join them later
 	let mut tasks = JoinSet::new();
 
-	for i in 0..1_000 {
+	for i in 0..1_0 {
 		tasks.spawn({
 			let pool = pool.clone();
 			async move {
