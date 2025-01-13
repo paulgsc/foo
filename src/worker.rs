@@ -136,10 +136,12 @@ where
 			result?;
 			Ok(())
 		});
+		log::info!("begin setting up finalize_task...");
 
 		match &result {
 			Ok(()) => self.finalize_task(task, result).await?,
 			Err(error) => {
+				log::error!("matched some error! {:?}", error);
 				if task.retries < task.max_retries {
 					let retries_i32 = i32::try_from(task.retries).unwrap();
 					let backoff = task.backoff_mode.next_attempt(retries_i32);
@@ -159,6 +161,7 @@ where
 	}
 
 	async fn finalize_task(&self, task: Task, result: Result<(), TaskExecError>) -> Result<(), BackieError> {
+		log::info!("finalize task called...");
 		match self.config.retention_mode {
 			RetentionMode::KeepAll => match result {
 				Ok(()) => {
