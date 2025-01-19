@@ -26,9 +26,6 @@ pub enum AsyncQueueError {
 	#[error("an error occurred with the database")]
 	Sqlx(#[from] sqlx::Error),
 
-	#[error(transparent)]
-	PgError(#[from] diesel::result::Error),
-
 	#[error("Task with name {0} is not registered")]
 	TaskNotRegistered(String),
 
