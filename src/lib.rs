@@ -100,10 +100,8 @@ pub use store::SqliteTaskStore;
 
 mod catch_unwind;
 pub mod errors;
-#[cfg(feature = "async_postgres")]
 mod queries;
 mod runnable;
-#[cfg(feature = "async_postgres")]
 // mod schema;
 mod sqlite_helpers;
 mod sqlite_task;

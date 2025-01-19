@@ -169,7 +169,7 @@ async fn main() -> anyhow::Result<()> {
 				.pull_interval(Duration::from_millis(100))
 				.retention_mode(RetentionMode::RemoveDone)
 				// Note: Reduced number of workers as SQLite doesn't handle as many concurrent connections as PostgreSQL
-				.num_workers(50),
+				.num_workers(10),
 		)
 		.start(async move {
 			let _ = rx.changed().await;

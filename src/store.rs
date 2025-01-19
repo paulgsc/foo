@@ -3,9 +3,6 @@ use crate::sqlite_task::{Task, TaskId, TaskState};
 use crate::BackgroundTask;
 use std::time::Duration;
 
-#[cfg(feature = "async_postgres")]
-mod pg_task_store;
-
 mod sqlite_task_store;
 
 // #[cfg(feature = "async_postgres")]
