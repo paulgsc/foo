@@ -39,19 +39,19 @@ impl Task {
 	#[allow(dead_code)]
 	pub(crate) async fn schedule_retry(connection: &mut SqliteConnection, id: TaskId, backoff: Duration, error_message: &str) -> Result<Self, AsyncQueueError> {
 		let error = serde_json::json!({
-				"error": error_message,
+			"error": error_message,
 		});
-		let scheduled_at = SqliteDateTime(Utc::now() + chrono::Duration::from_std(backoff).unwrap_or_else(|_| chrono::Duration::max_value()));
+		let scheduled_at = SqliteDateTime(Utc::now() + chrono::Duration::from_std(backoff).unwrap_or_else(|_| chrono::Duration::MAX));
 
 		let task = sqlx::query_as!(
 			Self,
 			r#"UPDATE backie_tasks 
-            SET error_info = ?,
-                retries = retries + 1,
-                scheduled_at = ?,
-                running_at = NULL
-            WHERE id = ?
-            RETURNING *"#,
+	    SET error_info = ?,
+		retries = retries + 1,
+		scheduled_at = ?,
+		running_at = NULL
+	    WHERE id = ?
+	    RETURNING *"#,
 			error,
 			scheduled_at,
 			id
@@ -69,7 +69,7 @@ impl Task {
 
 		match execution_timeout {
 			Some(timeout) => {
-				let timeout_threshold = SqliteDateTime(Utc::now() - chrono::Duration::from_std(timeout).unwrap_or_else(|_| chrono::Duration::max_value()));
+				let timeout_threshold = SqliteDateTime(Utc::now() - chrono::Duration::from_std(timeout).unwrap_or_else(|_| chrono::Duration::MAX));
 
 				sqlx::query_as!(
 					Self,
